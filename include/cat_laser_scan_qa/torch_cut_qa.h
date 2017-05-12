@@ -14,7 +14,11 @@ struct TorchCutQAParameters
 
 struct TorchCutQAResult
 {
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+  Eigen::Vector4f surface_plane_model;
+  std::vector<double> point_to_plane_distances; // (m) signed distance from every point in input to plane
+  pcl::PointIndices high_point_indices; // Indices (from 'input') of points judged to be 'out of spec'
 };
 
 /**
