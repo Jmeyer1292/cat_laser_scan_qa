@@ -6,7 +6,33 @@
 namespace
 {
 
-const int NUM_MAX_ITER_RANSAC = 1000;
+const int NUM_MAX_ITER_RANSAC = 4000;
+
+Eigen::Vector4f fitPlaneManually(const pcl::PointCloud<pcl::PointXYZ>& cloud)
+{
+  Eigen::MatrixXd lhs (cloud.size(), 3);
+  Eigen::VectorXd rhs (cloud.size());
+
+  for (size_t i = 0; i < cloud.size(); ++i)
+  {
+    const auto& pt = cloud.points[i];
+    lhs(i, 0) = pt.x;
+    lhs(i, 1) = pt.y;
+    lhs(i, 2) = 1.0;
+
+    rhs(i) = -1.0 * pt.z;
+  }
+
+  Eigen::Vector3d params = lhs.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(rhs);
+
+  Eigen::Vector3d normal (params(0), params(1), 1.0);
+  auto length = normal.norm();
+
+  normal /= length;
+  params(2) /= length;
+
+  return {normal(0), normal(1), normal(2), params(2)};
+}
 
 Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
                                     const double surface_tolerance)
@@ -30,7 +56,12 @@ Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &c
 
   assert(coefficients->values.size() == 4); // A plane should have 4 parameters
   auto vector = Eigen::Vector4f(coefficients->values.data());
-  return vector;
+
+  // Refine plane with custom plane fitter
+  pcl::PointCloud<pcl::PointXYZ> inlier_points;
+  pcl::copyPointCloud(*cloud, inliers->indices, inlier_points);
+
+  return fitPlaneManually(inlier_points);
 }
 
 std::vector<double> computeDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
@@ -61,7 +92,6 @@ pcl::PointIndices extractHighPoints(const std::vector<double>& plane_distances, 
   return high_points;
 }
 
-
 } // end of anonymous namespace
 
 cat_laser_scan_qa::TorchCutQAResult
@@ -78,7 +108,7 @@ cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr
   std::vector<double> distances = computeDistances(cloud, surface_plane_model);
 
   // Extract the indices of any point that is more than 'surface tolerance' above the nominal plane
-  pcl::PointIndices high_indices = extractHighPoints(distances, params.surface_tolerance * 1.2);
+  pcl::PointIndices high_indices = extractHighPoints(distances, params.surface_tolerance * 1.0);
 
   TorchCutQAResult result;
   result.surface_plane_model = surface_plane_model;

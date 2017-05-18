@@ -3,6 +3,8 @@
 #include <cat_laser_scan_qa/torch_cut_qa.h>
 #include <pcl/filters/extract_indices.h>
 
+// Returns a pair of clouds, first = the outliers of the cloud
+//                           second = the inliers of the cloud
 std::pair<pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointXYZ>>
 segmentCloud(pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud, const pcl::PointIndices& outliers)
 {
@@ -51,7 +53,7 @@ int main(int argc, char** argv)
 
   // Run algorithm
   cat_laser_scan_qa::TorchCutQAParameters params;
-  params.surface_tolerance = 0.001; // (m) A 1mm test tolerance
+  params.surface_tolerance = pnh.param<double>("surface_tolerance", 0.001); // (m) A 1mm test tolerance
   auto result = cat_laser_scan_qa::runQualityAssurance(cloud, params);
 
   // Report results
