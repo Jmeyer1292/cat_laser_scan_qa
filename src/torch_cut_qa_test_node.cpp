@@ -53,7 +53,8 @@ int main(int argc, char** argv)
 
   // Run algorithm
   cat_laser_scan_qa::TorchCutQAParameters params;
-  params.surface_tolerance = pnh.param<double>("surface_tolerance", 0.001); // (m) A 1mm test tolerance
+  params.surface_tolerance = pnh.param<double>("surface_tolerance", 0.0005); // (m) A 1mm test tolerance
+  params.plane_fit_ratio = pnh.param<double>("plane_fit_ratio", 1.0);
   auto result = cat_laser_scan_qa::runQualityAssurance(cloud, params);
 
   // Report results

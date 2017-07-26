@@ -6,7 +6,6 @@
 namespace
 {
 
-const int NUM_MAX_ITER_RANSAC = 4000;
 
 Eigen::Vector4f fitPlaneManually(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
@@ -44,10 +43,12 @@ Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &c
   seg.setInputCloud(cloud);
   seg.setModelType(pcl::SACMODEL_PLANE);
   seg.setMethodType(pcl::SAC_RANSAC);
+  const int NUM_MAX_ITER_RANSAC = 5000;
   seg.setMaxIterations(NUM_MAX_ITER_RANSAC);
   seg.setDistanceThreshold(surface_tolerance);
+  seg.setProbability(1);
   // Optional
-  seg.setOptimizeCoefficients(true);
+//  seg.setOptimizeCoefficients(true);
 
   // Segment the largest planar component from the remaining cloud
   pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
@@ -55,13 +56,15 @@ Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &c
   seg.segment (*inliers, *coefficients);
 
   assert(coefficients->values.size() == 4); // A plane should have 4 parameters
-  auto vector = Eigen::Vector4f(coefficients->values.data());
+//  auto vector = Eigen::Vector4f(coefficients->values.data());
+//  return vector;
 
   // Refine plane with custom plane fitter
   pcl::PointCloud<pcl::PointXYZ> inlier_points;
   pcl::copyPointCloud(*cloud, inliers->indices, inlier_points);
-
-  return fitPlaneManually(inlier_points);
+  auto vector = fitPlaneManually(inlier_points);
+  ROS_INFO_STREAM("Plane eq: " << vector.transpose());
+  return vector;
 }
 
 std::vector<double> computeDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
@@ -92,13 +95,53 @@ pcl::PointIndices extractHighPoints(const std::vector<double>& plane_distances, 
   return high_points;
 }
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr filterTable(const pcl::PointCloud<pcl::PointXYZ>& cloud,
+                                                const Eigen::Vector4f& plane_model)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr copy (new pcl::PointCloud<pcl::PointXYZ>);
+
+  for (const auto& pt : cloud)
+  {
+    if (pcl::pointToPlaneDistance(pt, plane_model) > 0.02)
+    {
+      copy->push_back(pt);
+    }
+  }
+  return copy;
+}
+
+Eigen::Vector4f planeCoefficients(const Eigen::Vector3d& point, const Eigen::Vector3d& normal)
+{
+  Eigen::Vector3f pointf = point.cast<float>();
+  Eigen::Vector3f normalf = normal.cast<float>();
+
+  // ax + by + cz + d = 0
+  Eigen::Vector4f result;
+  result(0) = normalf(0);
+  result(1) = normalf(1);
+  result(2) = normalf(2);
+  result(3) = -(pointf.dot(normalf));
+
+  return result;
+}
+
 } // end of anonymous namespace
 
 cat_laser_scan_qa::TorchCutQAResult
 cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
                                        const TorchCutQAParameters &params)
 {
-  Eigen::Vector4f surface_plane_model = computeSurfacePlane(cloud, params.surface_tolerance);
+  // Pre-filter the data
+  const Eigen::Vector3d plane_pt {1.40498, 0.0583, 0.92378 - 0.72871};
+  const Eigen::Vector3d plane_normal {0, 0, 1.0};
+
+  ROS_INFO_STREAM("Before table removal: " << cloud->size());
+  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered = filterTable(*cloud, planeCoefficients(plane_pt, plane_normal));
+  ROS_INFO_STREAM("After table removal: " << filtered->size());
+
+  // Find the top plane in the part data
+  Eigen::Vector4f surface_plane_model = computeSurfacePlane(filtered,
+                                                            params.plane_fit_ratio * params.surface_tolerance);
 
   // We define a positive distance as along the plane normal. The plane normal is assume to be pointing
   // out of the surface. So positive distances are points that are "out of spec" and need to be removed.
@@ -108,7 +151,7 @@ cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr
   std::vector<double> distances = computeDistances(cloud, surface_plane_model);
 
   // Extract the indices of any point that is more than 'surface tolerance' above the nominal plane
-  pcl::PointIndices high_indices = extractHighPoints(distances, params.surface_tolerance * 1.0);
+  pcl::PointIndices high_indices = extractHighPoints(distances, params.surface_tolerance);
 
   TorchCutQAResult result;
   result.surface_plane_model = surface_plane_model;

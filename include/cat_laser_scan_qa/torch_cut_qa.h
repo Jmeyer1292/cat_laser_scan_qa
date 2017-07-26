@@ -9,6 +9,7 @@ namespace cat_laser_scan_qa
 struct TorchCutQAParameters
 {
   double surface_tolerance; // (m) Max acceptable distance (+/-) to the ideal top surface
+  double plane_fit_ratio; // Percentage of the surface tolerance used to fit the plane
 };
 
 
