@@ -1,7 +1,9 @@
 #include "cat_laser_scan_qa/torch_cut_qa.h"
 
+//#include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/sample_consensus/ransac.h>
 
 namespace
 {
@@ -47,6 +49,8 @@ Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &c
   seg.setMaxIterations(NUM_MAX_ITER_RANSAC);
   seg.setDistanceThreshold(surface_tolerance);
   seg.setProbability(1);
+  seg.setAxis(Eigen::Vector3f(0, 0, 1));
+  seg.setEpsAngle(0.3);
   // Optional
 //  seg.setOptimizeCoefficients(true);
 
@@ -65,6 +69,43 @@ Eigen::Vector4f computeSurfacePlane(const pcl::PointCloud<pcl::PointXYZ>::Ptr &c
   auto vector = fitPlaneManually(inlier_points);
   ROS_INFO_STREAM("Plane eq: " << vector.transpose());
   return vector;
+}
+
+Eigen::Vector4f computeSurfacePlane2(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+                                     const double surface_tolerance)
+{
+  pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr
+    model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZ> (cloud));
+
+  pcl::RandomSampleConsensus<pcl::PointXYZ> ransac (model_p);
+  ransac.setDistanceThreshold(surface_tolerance);
+  ransac.setMaxIterations(5000);
+  ransac.setProbability(1);
+  ransac.computeModel();
+
+  Eigen::VectorXf vector;
+  std::vector<int> inliers;
+
+  ransac.getModelCoefficients(vector);
+  ransac.getInliers(inliers);
+  ROS_INFO_STREAM("Ransac Plane eq: " << vector.transpose());
+
+
+  // Segment the largest planar component from the remaining cloud
+//  pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
+//  pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
+//  seg.segment (*inliers, *coefficients);
+
+//  assert(coefficients->values.size() == 4); // A plane should have 4 parameters
+//  auto vector = Eigen::Vector4f(coefficients->values.data());
+//  return vector;
+
+  // Refine plane with custom plane fitter
+  pcl::PointCloud<pcl::PointXYZ> inlier_points;
+  pcl::copyPointCloud(*cloud, inliers, inlier_points);
+  auto vector2 = fitPlaneManually(inlier_points);
+  ROS_INFO_STREAM("Plane eq: " << vector2.transpose());
+  return vector2;
 }
 
 std::vector<double> computeDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
@@ -140,7 +181,7 @@ cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr
   ROS_INFO_STREAM("After table removal: " << filtered->size());
 
   // Find the top plane in the part data
-  Eigen::Vector4f surface_plane_model = computeSurfacePlane(filtered,
+  Eigen::Vector4f surface_plane_model = computeSurfacePlane2(filtered,
                                                             params.plane_fit_ratio * params.surface_tolerance);
 
   // We define a positive distance as along the plane normal. The plane normal is assume to be pointing
