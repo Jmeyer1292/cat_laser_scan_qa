@@ -137,13 +137,14 @@ pcl::PointIndices extractHighPoints(const std::vector<double>& plane_distances, 
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr filterTable(const pcl::PointCloud<pcl::PointXYZ>& cloud,
-                                                const Eigen::Vector4f& plane_model)
+                                                const Eigen::Vector4f& plane_model,
+                                                const double thresh)
 {
   pcl::PointCloud<pcl::PointXYZ>::Ptr copy (new pcl::PointCloud<pcl::PointXYZ>);
 
   for (const auto& pt : cloud)
   {
-    if (pcl::pointToPlaneDistance(pt, plane_model) > 0.02)
+    if (pcl::pointToPlaneDistance(pt, plane_model) > thresh)
     {
       copy->push_back(pt);
     }
@@ -176,8 +177,12 @@ cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr
   const Eigen::Vector3d plane_pt {1.40498, 0.0583, 0.92378 - 0.72871};
   const Eigen::Vector3d plane_normal {0, 0, 1.0};
 
+  const Eigen::Vector3d plane_pt2 {1.40498, 0.0583, 0.993503 - 0.72871};
+  const Eigen::Vector3d plane_normal2 {0, 0, 1.0};
+
   ROS_INFO_STREAM("Before table removal: " << cloud->size());
-  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered = filterTable(*cloud, planeCoefficients(plane_pt, plane_normal));
+  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered = filterTable(*cloud, planeCoefficients(plane_pt, plane_normal), 0.02);
+  filtered = filterTable(*filtered, planeCoefficients(plane_pt2, plane_normal2), 0.005);
   ROS_INFO_STREAM("After table removal: " << filtered->size());
 
   // Find the top plane in the part data
