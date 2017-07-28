@@ -182,7 +182,7 @@ cat_laser_scan_qa::runQualityAssurance(const pcl::PointCloud<pcl::PointXYZ>::Ptr
 
   ROS_INFO_STREAM("Before table removal: " << cloud->size());
   pcl::PointCloud<pcl::PointXYZ>::Ptr filtered = filterTable(*cloud, planeCoefficients(plane_pt, plane_normal), 0.02);
-  filtered = filterTable(*filtered, planeCoefficients(plane_pt2, plane_normal2), 0.005);
+  filtered = filterTable(*filtered, planeCoefficients(plane_pt2, plane_normal2), 0.004);
   ROS_INFO_STREAM("After table removal: " << filtered->size());
 
   // Find the top plane in the part data
