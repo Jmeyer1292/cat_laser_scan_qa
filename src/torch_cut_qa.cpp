@@ -128,7 +128,7 @@ pcl::PointIndices extractHighPoints(const std::vector<double>& plane_distances, 
   // Forgive the cast, 'indices' is a vector of ints so I use an int here
   for (int i = 0; i < static_cast<int>(plane_distances.size()); ++i)
   {
-    if (plane_distances[i] > tolerance)
+    if (std::isfinite(plane_distances[i]) && plane_distances[i] > tolerance)
     {
       high_points.indices.push_back(i);
     }
